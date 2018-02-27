@@ -1,0 +1,36 @@
+library('data.table')
+library('ggplot2')
+library('igraph')
+library('ggrepel')
+
+data <- fread('tsne.tsv')
+word.usage <- fread('word_usage.txt')
+setnames(data, c('x-tsne', 'y-tsne'), c('x_tsne', 'y_tsne'))
+setnames(word.usage, names(word.usage), c('word', 'num_users', 'avg_num_prior_days'))
+word.usage <- subset(word.usage, num_users >= 1000)
+setkey(data, word)
+setkey(word.usage, word)
+data <- merge(data, word.usage)
+
+# labels <- subset(data, outlier)
+data[,prob_days_bucket:=floor(log(avg_num_prior_days + 1, base=2))]
+sampling.probs <- 1 / prop.table(table(data$prob_days_bucket))
+print(sampling.probs)
+labels <- data[sample(1:nrow(data), 300, prob=sampling.probs[as.character(prob_days_bucket)])]
+mid <- log(median(data$avg_num_prior_days, na.rm=T), base=2)
+
+p <- ggplot(data=data, aes(x=x_tsne, y=y_tsne, label=word, fill=avg_num_prior_days, color=avg_num_prior_days))
+p <- p + geom_point(alpha=0.5, size=2)
+p <- p + ggtitle('')
+p <- p + xlab('First dimension of t-SNE decomposition')
+p <- p + ylab('Second dimension of t-SNE decomposition')
+p <- p + geom_label_repel(data=labels, color='black')
+p <- p + theme(text=element_text(size=22))
+p <- p + scale_fill_gradient2(low='green', mid='yellow', high='red', midpoint=mid, guide=F, trans='log2', breaks=c(1, 8, 64, 256))
+p <- p + scale_color_gradient2(low='green', mid='yellow', high='red', midpoint=mid, trans='log2')
+p <- p + theme(legend.position="bottom")
+p <- p + labs(color="Avg. Age of User Posting Token (Days)")
+
+png('tsne.png', type='cairo', width=1500, height=1500)
+print(p)
+dev.off()
