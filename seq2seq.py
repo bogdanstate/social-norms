@@ -1,95 +1,13 @@
 import torch
 from torch.nn import Module, Embedding, Parameter
 from torch.autograd import Variable
-from torch.utils.data import Dataset
+from dataset import DyadDataset
+from encoder import DyadEncoder
+from decoder import DyadDecoder
 import json
 import pickle
 
 max_length = 20
-
-class DyadDataset(Dataset):
-    
-    def __init__(self):
-        
-        self.data = []
-
-        with open('dyad_dataset.dev') as f:
-            
-            for l in f.readlines():
-                
-                dyad, acts = l.split('\t')
-                dyad = json.loads(dyad.replace("'",'"').replace(")","]").replace("(","["))
-                acts = json.loads(acts)
-                concat_acts = []
-
-                prev_act = None
-                for act in acts:
-                    if prev_act is None:
-                        prev_act = act
-                    else:
-                        spin, i, timestamp, text = act
-                        prev_spin, prev_i, prev_timestamp, prev_text = prev_act
-                        if spin == prev_spin:
-                            prev_act = (spin, prev_i, prev_timestamp, prev_text + text)
-                        else:
-                            concat_acts += [prev_act]
-                            prev_act = act
-                concat_acts += [prev_act]
-                self.data += [(dyad, concat_acts)]
-      
-    def __getitem__(self, index):
-        return self.data[index]
-
-    def __len__(self):
-        return len(self.data)
-
-
-# from http://pytorch.org/tutorials/intermediate/seq2seq_translation_tutorial.html
-class DyadEncoder(torch.nn.Module):
-    def __init__(self, emb, dim, cuda=False):
-        
-        super(DyadEncoder, self).__init__()
-        self.emb = emb
-        self.dim = dim
-        self.GRU = torch.nn.GRU(self.dim, self.dim)
-        self.cuda = cuda
-        if self.cuda:
-            self.GRU = self.GRU.cuda()
-            self.emb = self.emb.cuda()
-
-    def forward(self, input, hidden):
-        embedded = self.emb(input).view(1, 1, -1)
-        output = embedded
-        output, hidden = self.GRU(output, hidden)
-        return output, hidden
-
-    def initHidden(self):
-        result = Variable(torch.zeros(1, 1, self.dim))
-        return result.cuda() if self.cuda else result
-
-class DyadDecoder(torch.nn.Module):
-    
-    def __init__(self, emb, dim, output_size):
-        
-        super(DyadDecoder, self).__init__()
-        self.emb = emb
-        self.dim = dim
-        self.output_size = output_size
-        self.GRU = torch.nn.GRU(self.dim, self.dim)
-        self.out = torch.nn.Linear(self.dim, self.output_size)
-        self.softmax = torch.nn.LogSoftmax(dim=1)
-    
-    def forward(self, input, hidden):
-        output = self.emb(input).view(1, 1, -1)
-        output = torch.nn.functional.relu(output)
-        output, hidden = self.GRU(output, hidden)
-        output = self.softmax(self.out(output[0]))
-        return output, hidden
-    
-    def initHidden(self):
-        result = Variable(torch.zeros(1, 1, self.dim))
-        return result.cuda() if self.cuda else result
-
 
 dataset = DyadDataset()
 
@@ -107,14 +25,12 @@ decoder = DyadDecoder(emb, dim, num_entities)
 encoder_optim = torch.optim.Adam(encoder.parameters(), lr=10e-4)
 decoder_optim = torch.optim.Adam(decoder.parameters(), lr=10e-4)
 
-item = dataset[100]
-dyad, acts = item
-
 SOS_token = 0
 criterion = torch.nn.NLLLoss()
 i = 0
 for item in dataset:
     loss = 0
+    dyad, acts = item
     for this_act, next_act in zip(acts[:-1], acts[1:]):
        
         encoder_optim.zero_grad()
