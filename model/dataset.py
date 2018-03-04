@@ -1,14 +1,16 @@
 import json
 from torch.utils.data import Dataset
-
+from config import DATA_PATH, DATASET_NAME
+import torch
 
 class DyadDataset(Dataset):
     
     def __init__(self):
         
         self.data = []
-        self.users_lut = set()
-        with open('dyad_dataset.dev') as f:
+        self.dyad_lut = set()
+        path = DATA_PATH + DATASET_NAME
+        with open(path) as f:
             
             for l in f.readlines():
                 
@@ -17,9 +19,12 @@ class DyadDataset(Dataset):
                 # acts - encodes dialog acts - list of tuples, where each tuple
                 # is an act.
                 dyad, acts = l.split('\t')
-                dyad = json.loads(dyad)
-                
-                self.users_lut.add(dyad)
+                # super-hacky, need to change
+                dyad = json.loads(dyad.replace("'",'"').replace(")","]").replace("(","["))
+                # dyad = json.loads(dyad)
+                dyad = tuple(dyad)
+
+                self.dyad_lut.add(dyad)
                 
                 acts = json.loads(acts)
                 concat_acts = []
@@ -38,12 +43,15 @@ class DyadDataset(Dataset):
                             prev_act = act
                 concat_acts += [prev_act]
                 self.data += [(dyad, concat_acts)]
-      
+
     def __getitem__(self, index):
-        return self.data[index]
+        dyad, concat_acts = self.data[index]
+        return (dyad, concat_acts)
 
     def __len__(self):
         return len(self.data)
     
-    def get_users_lut(self):
-        return dict((k, v) for k, v in zip(list(self.users_lut), range(len(self.users_lut)))
+    def get_dyad_lut(self):
+        processed_lut = dict((k, v) for k, v in zip(list(self.dyad_lut), range(len(self.dyad_lut))))
+        return processed_lut
+
