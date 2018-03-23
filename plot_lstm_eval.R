@@ -1,0 +1,12 @@
+library('data.table')
+data <- fread('lstm_eval.txt')
+setnames(data, names(data), c('ego_status', 'alter_status', 'statement'))
+library('ggplot2')
+library('ggrepel')
+p <- ggplot(data=data)
+p <- p + geom_point(aes(x=ego_status, y=alter_status))
+p <- p + geom_label_repel(aes(x=ego_status, y=alter_status, label=statement))
+
+png('lstm_example_statements.png', width=1200, height=600)
+print(p)
+dev.off()
